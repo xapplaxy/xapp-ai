@@ -10,11 +10,21 @@ language is given (a multi-language xapp) does it also add i18n: one translation
 per language at public/cdn/miniapps/<name>/locale/<lang>/i18n.json and the
 src/lib/i18n.svelte.ts runtime that loads them.
 
-On success writes <dest>/<name>/.xapp-scaffold.json (the "scaffold ready"
-marker the xapp-builder subagent waits for) and prints the same JSON to stdout.
+Layouts (--layout, default auto):
+  standalone  the whole starter repo goes to <dest>/<name>/ and the app is <dest>/<name>/apps/xapp
+  monorepo    <dest> (or its parent, when <dest> is its apps/ folder) is an existing pnpm
+              workspace with apps/*. Only the starter's apps/xapp is used: its contents go flat to
+              <workspace>/apps/<name>/, and the starter's workspace package scope (e.g. @xapputils/*)
+              is rewritten to the host workspace's scope (e.g. @onlineutils/*).
+  auto        monorepo when such a workspace is detected, else standalone.
+
+On success writes <app>/.xapp-scaffold.json in monorepo mode or <dest>/<name>/.xapp-scaffold.json
+in standalone mode (the "scaffold ready" marker the xapp-builder subagent waits for, always at the
+printed "root") and prints the same JSON to stdout. --dry-run prints only the resolved layout/root.
 
 Run with:  python3 -I scaffold.py --name my-widget [--dest DIR] [--title T] [--description D]
                                   [--languages en,es,fr]   (first = default language)
+                                  [--layout auto|standalone|monorepo] [--dry-run]
 """
 
 import argparse
@@ -71,6 +81,48 @@ def parse_languages(raw: str) -> list:
     if not langs:
         fail("--languages must list at least one language code")
     return langs
+
+
+def find_workspace(dest: Path):
+    """Return the pnpm workspace root for dest (dest itself, or dest's parent when dest is its apps/)."""
+    for cand in (dest, dest.parent):
+        ws = cand / "pnpm-workspace.yaml"
+        if ws.is_file() and (cand / "apps").is_dir() and re.search(r"apps/\*", ws.read_text(encoding="utf-8")):
+            return cand
+    return None
+
+
+def package_names(root: Path) -> dict:
+    """Map scoped workspace package names under root/packages/* by their unscoped suffix."""
+    names = {}
+    for pj in sorted(root.glob("packages/*/package.json")):
+        try:
+            n = json.loads(pj.read_text(encoding="utf-8")).get("name", "")
+        except (ValueError, OSError):
+            continue
+        if n.startswith("@") and "/" in n:
+            names[n.split("/", 1)[1]] = n
+    return names
+
+
+def rewrite_scope(app: Path, mapping: dict) -> list:
+    """Replace starter workspace package names with host ones in every text file of app."""
+    changed = []
+    if not mapping:
+        return changed
+    pattern = re.compile("|".join(re.escape(k) for k in sorted(mapping, key=len, reverse=True)))
+    for f in app.rglob("*"):
+        if not f.is_file() or {"node_modules", "dist", ".turbo"} & set(f.relative_to(app).parts):
+            continue
+        try:
+            text = f.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        new = pattern.sub(lambda m: mapping[m.group(0)], text)
+        if new != text:
+            f.write_text(new, encoding="utf-8")
+            changed.append(str(f))
+    return changed
 
 
 def download_and_extract(url: str, target: Path) -> None:
@@ -148,6 +200,9 @@ def main() -> None:
                     help="comma-separated language codes the xapp supports; first is the default (default: en). "
                          "Two or more languages turn on i18n.")
     ap.add_argument("--zip-url", default=DEFAULT_ZIP, help="starter archive URL")
+    ap.add_argument("--layout", choices=["auto", "standalone", "monorepo"], default="auto",
+                    help="where the app goes (see module doc); default auto-detects a host pnpm workspace")
+    ap.add_argument("--dry-run", action="store_true", help="print the resolved layout and root, change nothing")
     args = ap.parse_args()
 
     name = args.name.strip()
@@ -159,23 +214,62 @@ def main() -> None:
     default_lang = languages[0]
     i18n = len(languages) > 1  # i18n only for multi-language xapps
 
-    target = (Path(args.dest).expanduser() / name).resolve()
+    dest = Path(args.dest).expanduser().resolve()
+    workspace = find_workspace(dest)
+    layout = args.layout
+    if layout == "auto":
+        layout = "monorepo" if workspace else "standalone"
+    if layout == "monorepo" and not workspace:
+        fail(f"--layout monorepo: no pnpm workspace with apps/* found at {dest} or {dest.parent}")
+
+    if layout == "monorepo":
+        target = workspace / "apps" / name  # the app itself; also the marker location
+        workspace_root = workspace
+    else:
+        target = dest / name
+        workspace_root = target
+
+    if args.dry_run:
+        print(json.dumps({"layout": layout, "root": str(target), "workspace_root": str(workspace_root),
+                          "exists": target.exists() and any(target.iterdir())}, indent=2))
+        return
+
     if target.exists() and any(target.iterdir()):
         fail(f"{target} already exists and is not empty")
 
-    download_and_extract(args.zip_url, target)
+    scope_changes = []
+    if layout == "monorepo":
+        with tempfile.TemporaryDirectory() as tmp:
+            starter = Path(tmp).resolve() / "starter"
+            download_and_extract(args.zip_url, starter)
+            src_app = starter / "apps" / "xapp"
+            if not src_app.is_dir():
+                fail(f"unexpected starter layout: apps/xapp missing in {args.zip_url}")
+            target.mkdir(parents=True, exist_ok=True)
+            for item in src_app.iterdir():
+                shutil.move(str(item), str(target / item.name))
+            starter_pkgs = package_names(starter)
+        host_pkgs = package_names(workspace)
+        mapping = {}
+        for suffix, old in starter_pkgs.items():
+            if suffix in host_pkgs and host_pkgs[suffix] != old:
+                mapping[old] = host_pkgs[suffix]
+            elif suffix not in host_pkgs:
+                print(f"WARN: host workspace has no counterpart for {old}; references left as is", file=sys.stderr)
+        app = target
+        scope_changes = rewrite_scope(app, mapping)
+    else:
+        download_and_extract(args.zip_url, target)
+        app = target / "apps" / "xapp"
+        if not app.is_dir():
+            fail(f"unexpected starter layout: {app} missing")
+        set_json_name(target / "package.json", name)
+        # repo docs (standalone only; a host monorepo keeps its own)
+        edit(target / "README.md", lambda t: re.sub(r"^# .*$", f"# {name}", t, count=1, flags=re.M))
+        edit(target / "AGENTS.md", lambda t: t.replace(f"{TEMPLATE_NAME} is a", f"{name} is a", 1))
 
-    app = target / "apps" / "xapp"
-    if not app.is_dir():
-        fail(f"unexpected starter layout: {app} missing")
-
-    # package.json names
-    set_json_name(target / "package.json", name)
+    # package.json name
     set_json_name(app / "package.json", name)
-
-    # repo docs
-    edit(target / "README.md", lambda t: re.sub(r"^# .*$", f"# {name}", t, count=1, flags=re.M))
-    edit(target / "AGENTS.md", lambda t: t.replace(f"{TEMPLATE_NAME} is a", f"{name} is a", 1))
 
     # migration
     edit(app / "migration" / "migration.yaml", lambda t: rewrite_migration(t, name, title, description, languages))
@@ -246,8 +340,11 @@ def main() -> None:
         "name": name,
         "title": title,
         "description": description,
+        "layout": layout,
         "root": str(target),
         "app_dir": str(app),
+        "workspace_root": str(workspace_root),
+        "scope_rewrites": scope_changes,
         "package_name": name,
         "languages": languages,
         "default_language": default_lang,

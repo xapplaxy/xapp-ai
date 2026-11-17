@@ -10,7 +10,12 @@ project created from the `xapplaxy/xapp-starter` template.
 ## Inputs (given in your task prompt)
 
 - `name` — kebab-case xapp name (also the package name and runtime key)
-- `root` — absolute path of the xapp project (`<dest>/<name>`); the app lives in `<root>`
+- `root` — absolute path where the scaffold writes `.xapp-scaffold.json`. Once the marker
+  exists, take two paths from it: `app_dir`, the app folder that every app-relative path below
+  (`src/`, `doc/`, `migration/`, `public/`, `api/`, `index.html`) is relative to, and
+  `workspace_root`, the pnpm workspace to run `pnpm` from. In `"layout": "monorepo"`, `root` is
+  the app (`<workspace>/apps/<name>`) inside an existing repo with other apps: change only files
+  inside `app_dir`. In `"layout": "standalone"`, `app_dir` is `<root>/apps/xapp`
 - exactly one source of truth:
   - `model` — path to (or inline) **object spatial domain model JSON**, or
   - `reference_url` — a web page describing the xapp / its domain, or
@@ -37,7 +42,7 @@ Do not touch `root` yet.
 
 If there was no model, **derive one** in the same shape (objects → attributes →
 relations/rules → layout regions) — you will save it to
-`<root>/doc/<name>.model.json` so later iterations can reuse it.
+`<app_dir>/doc/<name>.model.json` so later iterations can reuse it.
 
 Produce a short design plan: the entities, inputs, outputs, formulas, layout, and whether
 the xapp needs server-side data (an API) or runs fully in the browser. Include anything that
@@ -59,7 +64,9 @@ Read the marker. It lists the exact file paths you will edit.
 Read the existing files first, especially `src/lib/XAPP.svelte` (the sample shows how the
 `@xapplaxy/xy-ui` components like `XyLabel`, `XySelect`, `XyButton`, `XySlider`, `XyCard`,
 `XyCheckbox`, `XyToggle`, `XyRadioGroup`, `XyDatePicker`, `XyAccordion` and `XyTooltip` are
-used), `src/lib/XAPPContainer.svelte`, `src/lib/utils.ts`, `src/app.css`, and `<root>/AGENTS.md`.
+used), `src/lib/XAPPContainer.svelte`, `src/lib/utils.ts`, `src/app.css`, and `<workspace_root>/AGENTS.md`
+if it exists. In monorepo mode, also look at one sibling app under `<workspace_root>/apps/` for
+local conventions, and import shared code from the package names in `app_dir/package.json`.
 
 Conventions (from the starter, must follow):
 - Svelte 5 runes only (`$state`, `$derived`, `$effect`, `$props`) — no legacy `$:` syntax.
@@ -129,7 +136,7 @@ Work items:
 
 ## Phase 4 — Verify
 
-From `<root>`: `pnpm install` (once), then `pnpm --filter <name> build`. Fix all errors
+From `<workspace_root>`: `pnpm install` (once), then `pnpm --filter <name> build`. Fix all errors
 you introduced. Run `pnpm --filter <name> check` if it works in this template, and treat
 its failures as advisory if they also occur on untouched template files.
 
