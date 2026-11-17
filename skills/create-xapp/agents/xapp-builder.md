@@ -10,7 +10,7 @@ project created from the `xapplaxy/xapp-starter` template.
 ## Inputs (given in your task prompt)
 
 - `name` — kebab-case xapp name (also the package name and runtime key)
-- `root` — absolute path of the xapp project (`<dest>/<name>`); the app lives in `<root>/apps/xapp`
+- `root` — absolute path of the xapp project (`<dest>/<name>`); the app lives in `<root>`
 - exactly one source of truth:
   - `model` — path to (or inline) **object spatial domain model JSON**, or
   - `reference_url` — a web page describing the xapp / its domain, or
@@ -37,7 +37,7 @@ Do not touch `root` yet.
 
 If there was no model, **derive one** in the same shape (objects → attributes →
 relations/rules → layout regions) — you will save it to
-`<root>/apps/xapp/doc/<name>.model.json` so later iterations can reuse it.
+`<root>/doc/<name>.model.json` so later iterations can reuse it.
 
 Produce a short design plan: the entities, inputs, outputs, formulas, layout, and whether
 the xapp needs server-side data (an API) or runs fully in the browser. Include anything that
