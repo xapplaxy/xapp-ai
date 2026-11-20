@@ -102,6 +102,8 @@ When the builder's completion notification arrives:
    For a multi-language xapp, also check that `XAPPContainer.svelte` calls `loadI18n` and
    that each `public/cdn/miniapps/<name>/locale/<lang>/i18n.json` is translated.
    (`grep -n "\[" doc/*/<name>.md`). Each non-default doc must be translated, not a copy.
+   Each doc must follow the builder's **Doc style**: no leftover generic template sections
+   ("Why Use This Tool", generic FAQ), and worked examples whose numbers match the xapp.
 2. Delete the marker: `rm ROOT/.xapp-scaffold.json`.
 3. Tell the user:
    - where the app is (`app_dir`), and in standalone mode that the project root is `ROOT`

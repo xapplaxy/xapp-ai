@@ -121,11 +121,14 @@ Work items:
    - browser-only → delete the `api/` folder and remove the `all-miniapps-data` `<script>`
      from `index.html`.
 6. `doc/<lang>/<name>.md` (paths in the marker's `files.docs`; just one for a single-language
-   xapp) — write the default-language doc first: replace every `[placeholder]` with real content (how it
-   works, what it calculates, FAQs grounded in the domain). Keep the front matter and section
-   structure. *(i18n only)* Then write each other language's doc as a full, natural translation
-   (front matter `title`/`description` too) that uses the same UI labels as that
-   language's `i18n.json`.
+   xapp): write the default-language doc first, following **Doc style** below. Keep the
+   front matter, but fill in its `title` and `description`. Replace the **entire** template
+   body: drop its generic sections ("Why Use This Tool", "Try the …", the generic FAQ, `---`
+   rules) and write domain-specific content instead. *(i18n only)* Then write each other
+   language's doc as a full, natural translation with the same structure, sections and
+   worked examples. Translate the front matter `title`/`description` too, use that
+   language's number and currency format (e.g. `2,49 %`, `0,35 €` in German), and use
+   the same UI labels as that language's `i18n.json`.
 7. `migration/migration.yaml` — in the `Page` document fill `title` (SEO title),
    `description` (SEO description), `tags`, `excerpt`, `category` (keep `utility` unless
    clearly another), and add the reference URL under `links` (`- url: … / title: …`) when
@@ -133,6 +136,67 @@ Work items:
    `pathKey`, `widgets`, `languages`, `owner`, `lifecycle`, `apiVersion`,
    `kind`, or other keys (leave the existing `staus` key as is).
 8. If you derived the model, save it as `doc/<name>.model.json`.
+
+## Doc style
+
+**Style: plain-language technical explainer.** The doc is a reference guide that explains
+exactly how the xapp's calculation works, for the person using it. Technically it's as
+precise as documentation: every formula, rate, default and rounding rule is stated
+exactly. The voice is friendly and direct, like a good help-center article.
+
+- It is **not casual or a blog post**: no personal voice, anecdotes, opinions, hooks,
+  storytelling or calls to action.
+- It is **not a formal spec**: no jargon, no passive "the system shall…" wording, and no
+  undefined acronyms.
+- It is **not marketing**: it explains, it doesn't sell.
+
+Aim for a reader with no background in the domain who can follow every step and
+recompute a result by hand.
+
+**Structure**, in this order. Leave out a section only if it really doesn't apply:
+1. Front matter: `title` and `description`, both filled and specific. No `[placeholders]`.
+2. **No H1.** The page shows the title already. Start with 1–2 short intro paragraphs that
+   explain the real-world concept in plain words: what happens, who pays or gets what, and
+   the one fact people usually get wrong. Put key facts in **bold**.
+3. The **core formula** as a bold blockquote, e.g. `> **Fee = Amount × percentage rate + fixed fee**`.
+   Then a sentence on what the variables depend on and what optional extras exist.
+4. **Reference data table** when the domain has rates, limits or categories. Name the scope
+   and date in the heading, e.g. `## <Thing> rates (Germany, EUR, status 03/2026)`. Align
+   columns (`:---` for text, `---:` for numbers), put row labels in bold, and add a Notes
+   column. After the table, add one or two sentences on how the values apply and what the
+   xapp doesn't model.
+5. `## Step by step: <from input to result>`: a numbered list in the **same order the code
+   computes**, one line per step as `**Name** = formula`, with rounding noted where it
+   happens. Then explain any derived metric, and why it behaves the way it does.
+6. One `##` section per **mode or special case** the xapp supports (reverse calculation,
+   options, surcharges, conversions, …). Use a descriptive heading that says what the
+   reader wants, e.g. `## Reverse calculation: what to charge so a set amount arrives`.
+   Explain why the naive approach is wrong, give the formula as a bold blockquote, and
+   state defaults in bold, saying when a default is an editable estimate.
+7. `## Worked examples`: 3–5 realistic examples covering the main case, each mode, and an
+   edge case or comparison (e.g. a break-even point). Format each as
+   `**1. Short title**: one-line scenario with the **inputs in bold**.`, followed by bullets
+   that show the arithmetic with intermediate values (`100 × 2.49 % = **€2.49**`) and end
+   with the bold result. Every number must match what the xapp's functions in `utils.ts`
+   actually return, so compute the examples with that code rather than by hand.
+8. `## Rounding rules` (or `## Edge cases`): short bullets on rounding, zero or empty
+   inputs, limits, and what the UI shows when a result is invalid.
+9. `## Important notes`: 2–4 bullets covering when values may change and where to check
+   them, that results are estimates and not professional advice, and any known limitations.
+
+**Writing:**
+- Talk to the reader as "you". Use short, plain sentences, active voice and contractions
+  (doesn't, isn't, it's). Explain each term the first time it appears.
+- Be concrete. Give real numbers with units and currency, the defaults the xapp uses, and
+  name who does what. Say why a rule exists when that helps the reader.
+- Headings are sentence case and specific. Don't use headings like "Overview" or "How it works".
+- Use the symbols × ÷ − → and an ellipsis for truncated values (`2.855…`).
+- Use bold for key terms, inputs and results only, not whole sentences. No emoji, no
+  horizontal rules (`---`).
+- No filler or marketing ("fast, simple, and accurate", "No signup required", "Save time"),
+  no generic FAQ (install, mobile, data storage), and no claims the xapp doesn't back up.
+- Every formula, default, rate and example must match the implementation. If the source
+  is unclear about a value, say it's an estimate in the doc and list it under open questions.
 
 ## Phase 4 — Verify
 
@@ -147,6 +211,11 @@ its failures as advisory if they also occur on untouched template files.
 - Confirm that every `t('…')` key used in `src/` exists in the default-language file.
 - Confirm that each `doc/<lang>/<name>.md` exists, has no `[` placeholders, and is in its
   own language.
+
+Check every doc (all modes):
+- It has no `[` placeholders, no leftover template sections, and no H1.
+- It follows the **Doc style** structure.
+- Its worked-example numbers match the output of the `utils.ts` functions.
 
 ## Report (your final message)
 
